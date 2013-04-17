@@ -15,15 +15,39 @@ module RailsAdmin
           @properties
         end
 
+        register_instance_option :filterable do
+          true
+        end
+
         register_instance_option :pretty_value do
+          result = []
           v = bindings[:view]
-          [value].flatten.select(&:present?).map do |associated|
+          values = [value].flatten.select(&:present?)
+          associated = values.first
+          amc = polymorphic? ? RailsAdmin.config(associated) : associated_model_config # perf optimization for non-polymorphic associations
+          am = amc.abstract_model
+          model_name = self.abstract_model.model_name
+          can_see = !am.embedded? && (show_action = v.action(:show, am, associated))
+          show_link_to_list = can_see && value.is_a?(Enumerable) && amc.list.fields.select(&:filterable?).index { |field| field.name == relation_name.to_sym }
+          if show_link_to_list
+            link = v.link_to "#{model_name.underscore.humanize}'s #{self.label.downcase}", v.index_path(model_name: am.model_name.underscore, f: {relation_name => {some_id: {v: [bindings[:object].id]}}})
+            result << link
+          end
+          list = values.map do |associated|
             amc = polymorphic? ? RailsAdmin.config(associated) : associated_model_config # perf optimization for non-polymorphic associations
             am = amc.abstract_model
             wording = associated.send(amc.object_label_method)
             can_see = !am.embedded? && (show_action = v.action(:show, am, associated))
             can_see ? v.link_to(wording, v.url_for(:action => show_action.action_name, :model_name => am.to_param, :id => associated.id), :class => 'pjax') : wording
           end.to_sentence.html_safe
+          if !show_link_to_list || values.count <= maximum_associated_entries_list_size
+            result << list
+          end
+          v.raw result.join(': ')
+        end
+
+        register_instance_option :maximum_associated_entries_list_size do
+          10
         end
 
         # Accessor whether association is visible or not. By default
@@ -55,7 +79,12 @@ module RailsAdmin
         # preload entire associated collection (per associated_collection_scope) on load
         # Be sure to set limit in associated_collection_scope if set is large
         register_instance_option :associated_collection_cache_all do
-          @associated_collection_cache_all ||= (associated_model_config.abstract_model.count < 100)
+          true
+          #@associated_collection_cache_all ||= (associated_model_config.abstract_model.count < 100)
+        end
+
+        register_instance_option :relation_name do
+          self.abstract_model.model_name.underscore
         end
 
         # Reader for the association's child model's configuration

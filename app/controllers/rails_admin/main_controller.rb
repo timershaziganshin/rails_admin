@@ -76,10 +76,15 @@ module RailsAdmin
       {:sort => column, :sort_reverse => (params[:sort_reverse] == reversed_sort.to_s)}
     end
 
+    def current_path(additional_params = {})
+      url_for(rails_admin.routes.recognize_path(request.env['PATH_INFO']).merge(additional_params))
+    end
+    helper_method :current_path
+
     def redirect_to_on_success
       notice = t("admin.flash.successful", :name => @model_config.label, :action => t("admin.actions.#{@action.key}.done"))
       if params[:_add_another]
-        redirect_to new_path(:return_to => params[:return_to]), :flash => { :success => notice }
+        redirect_to current_path(:return_to => params[:return_to]), :flash => { :success => notice }
       elsif params[:_add_edit]
         redirect_to edit_path(:id => @object.id, :return_to => params[:return_to]), :flash => { :success => notice }
       else
