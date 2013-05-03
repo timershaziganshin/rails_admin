@@ -152,13 +152,11 @@ module RailsAdmin
             conditions_per_collection = {}
             field = fields.find{|f| f.name.to_s == field_name}
             next unless field
-            field.searchable_columns.each do |column_infos|
-              collection_name, column_name = parse_collection_name(column_infos[:column])
-              statement = build_statement(column_name, column_infos[:type], filter_dump[:v], (filter_dump[:o] || 'default'))
-              if statement
-                conditions_per_collection[collection_name] ||= []
-                conditions_per_collection[collection_name] << statement
-              end
+            statement = build_statement(field.children_fields.first || field.name, field.type, filter_dump[:v], (filter_dump[:o] || 'default'))
+            collection_name = config.abstract_model.model.collection_name.to_s
+            if statement
+              conditions_per_collection[collection_name] ||= []
+              conditions_per_collection[collection_name] << statement
             end
             if conditions_per_collection.any?
               field_statements = make_condition_for_current_collection(field, conditions_per_collection)
@@ -268,9 +266,12 @@ module RailsAdmin
         when :enum
           return if value.blank?
           { column => { "$in" => Array.wrap(value) } }
-        when :belongs_to_association, :bson_object_id
+        when :bson_object_id
           object_id = (object_id_from_string(value) rescue nil)
           { column => object_id } if object_id
+        when :belongs_to_association, :has_many_association, :has_and_belongs_to_many_association
+          return if value.blank?
+          { column => { "$in" => Array.wrap(value).map { |id| ObjectId.from_string(id.to_s) } } }
         end
       end
 
